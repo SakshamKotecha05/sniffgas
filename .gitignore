@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+data/*.zip
+data/*.txt
+data/*.parquet
+data/*.png
+!data/prepare.py
+!data/plot_onset.py
+
+.DS_Store

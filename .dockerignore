@@ -1,0 +1,11 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/*.zip
+data/*.txt
+data/*.parquet
+data/*.png
+.DS_Store
+.claude/
