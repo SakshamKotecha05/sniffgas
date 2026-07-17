@@ -1,0 +1,6 @@
+# Confounder: gas rises (max 533 ppm) but no context events -> anomaly without compound
+seed: 42
+trace: data/co_1hz.parquet
+window: {start_s: 1400, end_s: 1700}
+speed: 60
+events: []

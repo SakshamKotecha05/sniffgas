@@ -1,0 +1,9 @@
+# Confounder: quiet gas (setpoint 0) but busy context -> context without compound
+seed: 42
+trace: data/co_1hz.parquet
+window: {start_s: 302, end_s: 499}
+speed: 60
+events:
+  - {at_s: 330, kind: permit_active, zone: Z1, payload: {permit_type: hot_work}}
+  - {at_s: 360, kind: worker_pos,   zone: Z1, payload: {worker_count: 5, x: 10.0, y: 6.5}}
+  - {at_s: 420, kind: shift_change, zone: Z1, payload: {staffing_delta: -2}}

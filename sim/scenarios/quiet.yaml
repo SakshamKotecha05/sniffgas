@@ -1,0 +1,6 @@
+# Confounder: quiet gas, no context -> nothing should fire
+seed: 42
+trace: data/co_1hz.parquet
+window: {start_s: 2101, end_s: 2199}
+speed: 60
+events: []

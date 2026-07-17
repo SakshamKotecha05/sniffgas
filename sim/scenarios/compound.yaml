@@ -1,0 +1,9 @@
+# Hero run: setpoint 280 (green) -> 520 (crosses STEL 400); context lands during the climb
+seed: 42
+trace: data/co_1hz.parquet
+window: {start_s: 29200, end_s: 29500}
+speed: 20
+events:
+  - {at_s: 29255, kind: permit_active, zone: Z1, payload: {permit_type: hot_work}}
+  - {at_s: 29290, kind: worker_pos,   zone: Z1, payload: {worker_count: 4, x: 12.5, y: 8.2}}
+  - {at_s: 29320, kind: shift_change, zone: Z1, payload: {staffing_delta: -2}}
