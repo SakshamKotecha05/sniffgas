@@ -73,27 +73,32 @@ def _load_env(path=".env"):
 
 
 def demo():
-    # ponytail: canned query_kg/get_sensor_window handlers; wire real KG/replay
-    # feeds when the API gateway (Task 10) owns the streams.
+    # ponytail: canned get_sensor_window; wire the replay feed when the API
+    # gateway (Task 10) owns the streams.
     from datetime import datetime, timezone
 
     from groq import Groq
 
     from agent.report import generate_report
-    from core.contracts import Alert, Contributor, RiskScore
+    from core.contracts import Alert, ContextEvent, Contributor, RiskScore
+    from core.kg import DEMO_LAYOUT, PlantGraph
 
     _load_env()
     client = Groq()
     clauses = json.load(open("agent/corpus/clauses.json"))
+    now = datetime.now(timezone.utc)
+    g = PlantGraph(DEMO_LAYOUT)
+    g.apply_event(ContextEvent(ts=now, zone="Z1", kind="permit_active",
+                               payload={"permit_type": "hot_work"}))
+    g.set_gas_slope("Z1", 0.9)
     tick = RiskScore(
-        ts=datetime.now(timezone.utc), zone="Z1", anomaly=0.91, compound=0.88,
-        level="red",
+        ts=now, zone="Z1", anomaly=0.91, compound=0.88, level="red",
         contributors=[Contributor(feature="ppm_slope", value=0.9, weight=0.6)],
-        subgraph={"nodes": ["Z1", "permit-7"], "edges": [["Z1", "permit-7"]]})
+        subgraph=g.subgraph("Z1"))
     window = {"zone": "Z1", "window_s": 30, "ppm": [610, 640, 700]}
     out = {}
     handlers = {
-        "query_kg": lambda: tick.subgraph,
+        "query_kg": lambda: g.subgraph(tick.zone),
         "get_sensor_window": lambda: window,
         "search_regulation": lambda: [
             {"id": c["id"], "title": c["title"]} for c in clauses],
