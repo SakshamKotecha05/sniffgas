@@ -5,8 +5,13 @@ Call 1: 70B narrative, corpus clauses inlined with stable ids, model cites
 id triggers ONE regeneration, then the cached fallback.
 Call 2: 70B JSON-mode structured output, validated with pydantic.
 
-D3 spike findings (FS): TODO — pin citation prompt + extraction regex from a
-real Groq call against the drafted corpus; record model pricing/limits here.
+D3 spike findings (FS), 2026-07-18, groq SDK 1.5.0, llama-3.3-70b-versatile:
+live generate_report against the 6-clause corpus succeeded first try —
+2.0s wall for both calls (well under TIMEOUT_S=10), 5/5 cited ids verified
+by CITE_RE with no regeneration, JSON-mode output passed StructuredReport
+validation unchanged. Citation prompt + regex are hereby pinned as-is.
+Pricing/rate limits: check the Groq console for the current tier before
+demo day; keep the cached fallback wired regardless (Q12).
 """
 import json
 import re
@@ -14,7 +19,7 @@ import re
 from pydantic import BaseModel
 
 CITE_RE = re.compile(r"\[([a-z0-9-]+)\]")
-MODEL = "llama-3.3-70b-versatile"  # pin against Groq console at D3 spike
+MODEL = "llama-3.3-70b-versatile"  # pinned: verified live at D3 spike (2026-07-18)
 TIMEOUT_S = 10  # hard timeout; on breach the caller serves the cached report
 
 
