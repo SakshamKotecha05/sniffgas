@@ -53,3 +53,14 @@ def healthz() -> dict:
 _dist = Path(__file__).parent.parent / "web" / "dist"
 if _dist.is_dir():  # Vercel fallback: serve the built dashboard if present
     app.mount("/", StaticFiles(directory=_dist, html=True), name="web")
+
+
+if __name__ == "__main__":  # `python -m api.main` — demo runner: gateway + fusion feed
+    import threading
+
+    import uvicorn
+
+    from api.feed import start_feed  # deferred: keeps TestClient imports sklearn-free
+
+    threading.Thread(target=start_feed, args=(push_risk_score,), daemon=True).start()
+    uvicorn.run(app, host="0.0.0.0", port=8000)

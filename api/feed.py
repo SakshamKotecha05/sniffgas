@@ -1,0 +1,95 @@
+"""Fusion feed (pipeline glue): Redis sensor/context streams -> RiskScore -> push.
+
+Runs as a daemon thread inside the gateway process (`python -m api.main`)
+because push_risk_score broadcasts to in-process /live WS clients.
+api/ may import core/, never the reverse (ADR 0001 layering).
+"""
+from __future__ import annotations
+
+import os
+import time
+from collections import defaultdict, deque
+from pathlib import Path
+from typing import Callable
+
+import pandas as pd
+
+from core.anomaly.baseline import WINDOW_S, IForestScorer, gas_residual_slope
+from core.contracts import (STREAM_CONTEXT, STREAM_SENSOR, ContextEvent,
+                            RiskScore, SensorTick, loads)
+from core.fusion import CompoundScorer, train_demo_scorer
+from core.kg import DEMO_LAYOUT, PlantGraph
+
+# ponytail: demo operating point, hardcoded. The eval-blessed thresholds come out
+# of core/eval/run_eval.py (matched-precision point on the validation split);
+# re-paste here after each eval run. RED matches agent/escalate.py's 0.75 gate.
+AMBER_T, RED_T = 0.40, 0.75
+
+_TRAIN_ROWS = 20_000  # temporal head of the 1 Hz trace ≈ the eval train period
+_MIN_WINDOW = 5       # ticks per zone before an anomaly score is trusted
+
+
+def level_for(compound: float) -> str:
+    return "red" if compound >= RED_T else "amber" if compound >= AMBER_T else "green"
+
+
+def score_tick(tick: SensorTick, anomaly: float,
+               g: PlantGraph, scorer: CompoundScorer) -> RiskScore:
+    """Pure fusion step: one tick + current KG state -> RiskScore."""
+    feats = g.features(tick.zone, tick.ts, anomaly)
+    compound, contributors = scorer.predict(feats)
+    return RiskScore(ts=tick.ts, zone=tick.zone, anomaly=anomaly,
+                     compound=compound, level=level_for(compound),
+                     contributors=contributors, subgraph=g.subgraph(tick.zone))
+
+
+def fit_anomaly(parquet: str | Path = "data/co_1hz.parquet") -> IForestScorer:
+    """Fit the anomaly scorer of record on the temporal head of the trace."""
+    df = pd.read_parquet(parquet).head(_TRAIN_ROWS)
+    chans = [c for c in df.columns if c.startswith("s") and c != "setpoint_gas1"]
+    scorer = IForestScorer()
+    scorer.fit(df[chans])
+    return scorer
+
+
+def run_feed(r, push: Callable[[RiskScore], None], *,
+             g: PlantGraph | None = None,
+             scorer: CompoundScorer | None = None,
+             iforest: IForestScorer | None = None) -> None:
+    """Blocking consume loop. Reads only entries newer than startup ("$"),
+    so start the gateway before `python -m sim.replay`."""
+    g = g or PlantGraph(DEMO_LAYOUT)
+    scorer = scorer or train_demo_scorer()
+    iforest = iforest or fit_anomaly()
+    windows: dict[str, deque] = defaultdict(lambda: deque(maxlen=WINDOW_S))
+    last = {STREAM_SENSOR: "$", STREAM_CONTEXT: "$"}
+
+    while True:
+        for stream, entries in r.xread(last, block=1000) or []:
+            name = stream.decode() if isinstance(stream, bytes) else stream
+            for entry_id, fields in entries:
+                last[name] = entry_id
+                raw = fields.get(b"data") or fields.get("data")
+                if name == STREAM_CONTEXT:
+                    g.apply_event(loads(ContextEvent, raw))
+                    continue
+                tick = loads(SensorTick, raw)
+                win = windows[tick.zone]
+                win.append(tick.channels)
+                if len(win) < _MIN_WINDOW:
+                    continue
+                wdf = pd.DataFrame(list(win))
+                g.set_gas_slope(tick.zone, gas_residual_slope(wdf))
+                push(score_tick(tick, iforest.score_window(wdf), g, scorer))
+
+
+def start_feed(push: Callable[[RiskScore], None]) -> None:
+    """Daemon-thread entry point: connect, fit, consume; retry on Redis loss."""
+    import redis
+    r = redis.Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+    iforest = fit_anomaly()  # fit once (~seconds); survives reconnects
+    while True:
+        try:
+            run_feed(r, push, iforest=iforest)
+        except redis.exceptions.ConnectionError:
+            time.sleep(1)  # ponytail: blind retry is enough for a demo box
