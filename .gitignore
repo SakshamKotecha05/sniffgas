@@ -10,4 +10,7 @@ data/*.png
 !data/prepare.py
 !data/plot_onset.py
 
+.env
 .DS_Store
+eval_pr_curves.png
+report.md
