@@ -51,3 +51,27 @@ test("clicking a zone opens drill-down with contributors", () => {
   expect(screen.getByTestId("contrib-co_ppm")).toBeTruthy();
   expect(screen.getByTestId("contrib-temp_c")).toBeTruthy();
 });
+
+test("evacuation alert shows banner; acknowledge dismisses it", () => {
+  vi.stubGlobal("WebSocket", FakeWS as unknown as typeof WebSocket);
+  render(<App />);
+  expect(screen.queryByTestId("alert-banner")).toBeNull();
+  act(() =>
+    FakeWS.last!.onmessage!({
+      data: JSON.stringify({
+        ts: "2026-07-19T00:00:00Z", zone: "Z1", kind: "evacuation",
+        compound: 0.91, report_id: "rpt-Z1-000000",
+      }),
+    }),
+  );
+  const banner = screen.getByTestId("alert-banner");
+  expect(banner.textContent).toMatch(/EVACUATION/i);
+  expect(banner.textContent).toMatch(/Z1/);
+  expect(screen.getByTestId("alert-report-link").getAttribute("href")).toBe(
+    "/reports/rpt-Z1-000000",
+  );
+  act(() => {
+    fireEvent.click(screen.getByTestId("alert-ack"));
+  });
+  expect(screen.queryByTestId("alert-banner")).toBeNull();
+});

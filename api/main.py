@@ -24,6 +24,36 @@ def push_risk_score(model: BaseModel) -> None:
         loop.call_soon_threadsafe(q.put_nowait, data)
 
 
+_last_level: dict[str, str] = {}  # zone -> last seen level, for red-crossing detection
+
+
+def push_with_alerts(score) -> None:
+    """push_risk_score + fire one evacuation Alert per crossing into red."""
+    from core.contracts import Alert  # deferred like start_feed: keeps imports light
+
+    push_risk_score(score)
+    prev, _last_level[score.zone] = _last_level.get(score.zone, "green"), score.level
+    if score.level != "red" or prev == "red":
+        return
+    rid = f"rpt-{score.zone}-{score.ts:%H%M%S}"
+    top = sorted(score.contributors, key=lambda c: abs(c.weight), reverse=True)[:5]
+    # ponytail: canned report from the score itself; swap for agent/report.py's
+    # two-call cited generation when the demo box has GROQ_API_KEY wired here.
+    REPORTS[rid] = {
+        "structured": {"zone": score.zone, "ts": score.ts.isoformat(),
+                       "compound": score.compound, "severity": "high"},
+        "narrative": (
+            f"Evacuation ordered for zone {score.zone} at {score.ts:%H:%M:%S}: "
+            f"compound risk {score.compound:.2f} crossed the red threshold. "
+            "Top contributors: "
+            + "; ".join(f"{c.feature}={c.value:.2f} (w {c.weight:+.2f})" for c in top)
+        ),
+        "subgraph": score.subgraph,
+    }
+    push_risk_score(Alert(ts=score.ts, zone=score.zone, kind="evacuation",
+                          compound=score.compound, report_id=rid))
+
+
 @app.websocket("/live")
 async def live(ws: WebSocket) -> None:
     await ws.accept()
@@ -62,5 +92,5 @@ if __name__ == "__main__":  # `python -m api.main` — demo runner: gateway + fu
 
     from api.feed import start_feed  # deferred: keeps TestClient imports sklearn-free
 
-    threading.Thread(target=start_feed, args=(push_risk_score,), daemon=True).start()
+    threading.Thread(target=start_feed, args=(push_with_alerts,), daemon=True).start()
     uvicorn.run(app, host="0.0.0.0", port=8000)

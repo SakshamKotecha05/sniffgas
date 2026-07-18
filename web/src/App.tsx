@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import Heatmap from "./Heatmap";
 import DrillDown from "./DrillDown";
-import { connectLive, type Level, type RiskScore } from "./ws";
+import AlertFlow from "./AlertFlow";
+import { connectLive, type Alert, type Level, type RiskScore } from "./ws";
 
 export default function App() {
   const [scores, setScores] = useState<Record<string, RiskScore>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [alert, setAlert] = useState<Alert | null>(null);
 
   useEffect(() => {
     const ws = connectLive((m) => {
       if ("level" in m) setScores((prev) => ({ ...prev, [m.zone]: m }));
+      else setAlert(m); // ponytail: latest alert wins; add a queue if multi-zone alerts overlap
     });
     return () => ws.close();
   }, []);
@@ -23,6 +26,7 @@ export default function App() {
       <h1 className="mb-4 text-2xl font-semibold text-slate-800">
         Compound Risk — Live Plant View
       </h1>
+      <AlertFlow alert={alert} onAck={() => setAlert(null)} />
       <div className="flex flex-wrap items-start gap-6">
         <Heatmap levels={levels} selected={selected} onSelect={setSelected} />
         <DrillDown zone={selected} score={selected ? (scores[selected] ?? null) : null} />
