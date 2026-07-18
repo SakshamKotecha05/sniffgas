@@ -1,0 +1,50 @@
+[
+  {
+    "id": "fa-41b",
+    "title": "Factories Act 1948 §41B",
+    "text": "Occupier of a factory involving hazardous processes must disclose information on dangers and health hazards, maintain an on-site emergency plan, and lay down measures for handling, usage and disposal of hazardous substances.",
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/1530",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  },
+  {
+    "id": "fa-41c",
+    "title": "Factories Act 1948 §41C",
+    "text": "Occupier must maintain accurate health records of workers exposed to hazardous processes and appoint persons with prescribed qualifications to supervise handling of hazardous substances.",
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/1530",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  },
+  {
+    "id": "fa-41d",
+    "title": "Factories Act 1948 §41D",
+    "text": "Central Government may appoint an inquiry committee into occurrences involving extraordinary situations in factories engaged in hazardous processes.",
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/1530",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  },
+  {
+    "id": "fa-41f",
+    "title": "Factories Act 1948 §41F",
+    "text": "Maximum permissible threshold limits of exposure to chemical and toxic substances in manufacturing processes shall not exceed the values in the Second Schedule.",
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/1530",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  },
+  {
+    "id": "fa-41h",
+    "title": "Factories Act 1948 §41H",
+    "text": "Workers have the right to warn the occupier about imminent danger of serious bodily injury or death; the occupier must take immediate remedial action and inform the Inspector.",
+    "source_url": "https://www.indiacode.nic.in/handle/123456789/1530",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  },
+  {
+    "id": "oisd-105",
+    "title": "OISD-STD-105 Work Permit System",
+    "text": "Hot work, confined-space entry and other hazardous jobs in oil/gas installations require a formal work permit specifying gas-test results, isolation, PPE and authorised signatories before work starts.",
+    "source_url": "https://www.oisd.gov.in/standards",
+    "retrieved": "2026-07-18",
+    "checked_by": null
+  }
+]
