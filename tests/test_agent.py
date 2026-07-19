@@ -64,6 +64,19 @@ def test_corpus_schema():
     assert "fa-41b" in ids  # id cited in report.py prompt example
 
 
+# --- the payoff panel's ₹ figures must resolve against the same corpus (§8) ---
+def test_payoff_panel_citations_resolve():
+    import re
+    from pathlib import Path
+    root = Path(__file__).parent.parent
+    clauses = json.loads((root / "agent" / "corpus" / "clauses.json").read_text())
+    ids = {c["id"] for c in clauses}
+    panel = (root / "web" / "src" / "PayoffPanel.tsx").read_text()
+    cited = set(re.findall(r'cite:\s*"([^"]+)"', panel))
+    assert cited, "ROI figures must carry clause ids"
+    assert cited <= ids, f"unresolvable citations: {cited - ids}"
+
+
 # --- escalate.py: SDK tool loop, ends when fire_alert+generate_report done ---
 def _tool_reply(name):
     fn = type("F", (), {"name": name, "arguments": "{}"})
