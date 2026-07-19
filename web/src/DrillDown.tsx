@@ -1,6 +1,7 @@
 // Drill-down panel — latest RiskScore for the selected zone: level badge,
-// compound/anomaly readouts, contributor bars (plan.md Task 12).
-import type { Level, RiskScore } from "./ws";
+// compound/anomaly readouts, contributor bars, "why red" subgraph node-link
+// render (plain SVG; no graph lib — plan.md Task 12 / D8).
+import type { Level, RiskScore, SubgraphNode } from "./ws";
 
 const BADGE: Record<Level, string> = {
   green: "bg-green-100 text-green-800",
@@ -13,6 +14,102 @@ const BAR: Record<Level, string> = {
   amber: "bg-amber-500",
   red: "bg-red-500",
 };
+
+// Node fill by kg.py node type; permits/ignition pop, plumbing stays muted.
+const NODE_FILL: Record<string, string> = {
+  zone: "#475569", // slate-600
+  sensor: "#0ea5e9", // sky-500
+  ignition: "#f97316", // orange-500
+  worker_group: "#10b981", // emerald-500
+  permit: "#e11d48", // rose-600
+};
+
+function SubgraphView({
+  zone,
+  nodes,
+  edges,
+  level,
+}: {
+  zone: string;
+  nodes: SubgraphNode[];
+  edges: { source: string; target: string }[];
+  level: Level;
+}) {
+  const placed = nodes.filter(
+    (n): n is SubgraphNode & { x: number; y: number } =>
+      typeof n.x === "number" && typeof n.y === "number",
+  );
+  if (placed.length === 0) return null;
+
+  // Fit floor-plan px coords into the panel: pad the bounding box, let SVG scale.
+  const PAD = 46;
+  const xs = placed.map((n) => n.x);
+  const ys = placed.map((n) => n.y);
+  const minX = Math.min(...xs) - PAD;
+  const minY = Math.min(...ys) - PAD;
+  const w = Math.max(...xs) - minX + PAD;
+  const h = Math.max(...ys) - minY + PAD;
+  const pos = new Map(placed.map((n) => [n.id, n]));
+
+  return (
+    <svg
+      data-testid="drilldown-subgraph"
+      viewBox={`${minX} ${minY} ${w} ${h}`}
+      className="mt-1 w-full rounded bg-slate-50"
+      role="img"
+      aria-label={`Risk subgraph around ${zone}`}
+    >
+      {edges.map((e) => {
+        const a = pos.get(e.source);
+        const b = pos.get(e.target);
+        if (!a || !b) return null;
+        return (
+          <line
+            key={`${e.source}-${e.target}`}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke="#cbd5e1"
+            strokeWidth={2}
+          />
+        );
+      })}
+      {placed.map((n) => {
+        const isFocus = n.id === zone;
+        return (
+          <g key={n.id} data-testid={`sg-node-${n.id}`}>
+            {isFocus && (
+              <circle
+                cx={n.x}
+                cy={n.y}
+                r={22}
+                fill="none"
+                stroke={level === "red" ? "#ef4444" : level === "amber" ? "#f59e0b" : "#22c55e"}
+                strokeWidth={4}
+              />
+            )}
+            <circle
+              cx={n.x}
+              cy={n.y}
+              r={n.type === "zone" ? 15 : 10}
+              fill={NODE_FILL[n.type ?? ""] ?? "#94a3b8"}
+            />
+            <text
+              x={n.x}
+              y={n.y + (n.type === "zone" ? 32 : 26)}
+              textAnchor="middle"
+              fontSize={13}
+              fill="#334155"
+            >
+              {n.label ?? n.id}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 
 export default function DrillDown({
   zone,
@@ -92,6 +189,20 @@ export default function DrillDown({
               </li>
             ))}
         </ul>
+      )}
+
+      {(score.subgraph.nodes?.length ?? 0) > 0 && (
+        <>
+          <h3 className="mb-1 mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">
+            Risk subgraph (2-hop)
+          </h3>
+          <SubgraphView
+            zone={zone}
+            nodes={score.subgraph.nodes ?? []}
+            edges={score.subgraph.edges ?? []}
+            level={score.level}
+          />
+        </>
       )}
       <p className="mt-2 text-right text-[10px] text-slate-400">as of {score.ts}</p>
     </aside>

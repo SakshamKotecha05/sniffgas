@@ -7,6 +7,20 @@ export interface Contributor {
   weight: number;
 }
 
+// Mirrors core/kg.py PlantGraph.subgraph(): 2-hop neighborhood, floor-plan px coords.
+export interface SubgraphNode {
+  id: string;
+  type?: string; // zone | sensor | ignition | worker_group | permit
+  label?: string;
+  x?: number;
+  y?: number;
+}
+
+export interface SubgraphEdge {
+  source: string;
+  target: string;
+}
+
 export interface RiskScore {
   ts: string;
   zone: string;
@@ -14,7 +28,7 @@ export interface RiskScore {
   compound: number;
   level: Level;
   contributors: Contributor[];
-  subgraph: { nodes?: unknown[]; edges?: unknown[] };
+  subgraph: { nodes?: SubgraphNode[]; edges?: SubgraphEdge[] };
 }
 
 export interface Alert {
