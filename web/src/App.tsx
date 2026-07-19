@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Heatmap from "./Heatmap";
 import DrillDown from "./DrillDown";
 import AlertFlow from "./AlertFlow";
+import PayoffPanel from "./PayoffPanel";
 import { connectLive, type Alert, type Level, type RiskScore } from "./ws";
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
       <div className="flex flex-wrap items-start gap-6">
         <Heatmap levels={levels} selected={selected} onSelect={setSelected} />
         <DrillDown zone={selected} score={selected ? (scores[selected] ?? null) : null} />
+        <PayoffPanel />
       </div>
     </main>
   );
