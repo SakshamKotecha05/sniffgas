@@ -1,6 +1,10 @@
 // Typed WS client — types mirror core/contracts.py by hand (plan.md §2).
 export type Level = "green" | "amber" | "red";
 
+// ISA-18.2-style two-tier alarm state (core/fusion.py predict_state):
+// WATCH = hazardous context assembled, gas not yet confirming; ALARM = gas-confirmed.
+export type RiskState = "NORMAL" | "WATCH" | "ALARM";
+
 export interface Contributor {
   feature: string;
   value: number;
@@ -27,6 +31,7 @@ export interface RiskScore {
   anomaly: number;
   compound: number;
   level: Level;
+  state?: RiskState; // optional: tolerate pre-two-tier payloads (defaults NORMAL)
   contributors: Contributor[];
   subgraph: { nodes?: SubgraphNode[]; edges?: SubgraphEdge[] };
 }

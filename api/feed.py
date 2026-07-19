@@ -37,16 +37,22 @@ def score_tick(tick: SensorTick, anomaly: float,
                g: PlantGraph, scorer: CompoundScorer) -> RiskScore:
     """Pure fusion step: one tick + current KG state -> RiskScore."""
     feats = g.features(tick.zone, tick.ts, anomaly)
-    compound, contributors = scorer.predict(feats)
+    compound, state, _ungated, contributors = scorer.predict_state(feats)
+    level = level_for(compound)
+    if state == "WATCH" and level == "green":
+        level = "amber"  # pre-incident advisory: context assembled, gas not yet confirming
     return RiskScore(ts=tick.ts, zone=tick.zone, anomaly=anomaly,
-                     compound=compound, level=level_for(compound),
+                     compound=compound, level=level, state=state,
                      contributors=contributors, subgraph=g.subgraph(tick.zone))
 
 
 def fit_anomaly(parquet: str | Path = "data/co_1hz.parquet") -> IForestScorer:
     """Fit the anomaly scorer of record on the temporal head of the trace."""
     df = pd.read_parquet(parquet).head(_TRAIN_ROWS)
-    chans = [c for c in df.columns if c.startswith("s") and c != "setpoint_gas1"]
+    # MOX channels only — excluding just setpoint_gas1 let setpoint_gas2 leak
+    # in; setpoints are ground truth, never model input (ADR 0001/0002).
+    chans = [c for c in df.columns
+             if c.startswith("s") and not c.startswith("setpoint")]
     scorer = IForestScorer()
     scorer.fit(df[chans])
     return scorer

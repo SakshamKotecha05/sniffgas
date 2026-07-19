@@ -23,11 +23,21 @@ def _features(df: pd.DataFrame, window: int = WINDOW_S) -> pd.DataFrame:
     return pd.DataFrame(feats, index=df.index)
 
 
+# Raw mean channel slope during the hero climb peaks around ~SLOPE_SCALE units/s;
+# dividing then clipping puts the KG feature in the [0, 1] band the fusion layer
+# was designed for (see core/fusion.py `_seed_corpus`, agent/escalate.py feeds 0.9).
+SLOPE_SCALE = 5.0
+
+
 def gas_residual_slope(window: pd.DataFrame) -> float:
-    """Mean per-second slope across sensor channels — KG feature input."""
+    """Rising-gas evidence in [0, 1] — KG feature input (§3 `gas_residual_slope`).
+
+    Mean per-second slope across sensor channels, rectified (falling gas is not
+    leak evidence) and normalized by SLOPE_SCALE. Setpoint columns must be
+    excluded by the caller (ADR 0001/0002 anti-circularity)."""
     slopes = [np.polyfit(np.arange(len(window)), window[c].astype(float), 1)[0]
               for c in window.columns]
-    return float(np.mean(slopes))
+    return float(np.clip(max(np.mean(slopes), 0.0) / SLOPE_SCALE, 0.0, 1.0))
 
 
 class IForestScorer:

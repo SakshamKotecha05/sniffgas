@@ -49,6 +49,30 @@ def _sigmoid(z: np.ndarray | float) -> np.ndarray | float:
     return 1.0 / (1.0 + np.exp(-np.clip(z, -30, 30)))
 
 
+# Gas-evidence gate (D6 conjunction, §5 guardrail 5): compound risk requires
+# rising gas. `gas_residual_slope` arrives normalized to [0, 1] (see
+# core/anomaly/baseline.py::SLOPE_SCALE); the gate is a smooth monotone factor
+# ≈0.08 at slope 0 and ≈1 above ~0.3, so context alone can never push the
+# compound score high — the exact failure the confounder check flags. The
+# product of two nondecreasing [0, 1] factors keeps monotonicity in every input.
+GATE_K, GATE_X0 = 25.0, 0.10
+
+# Two-tier alarm-management states (ISA-18.2-style escalation):
+#   WATCH — the *ungated* calibrated score is high (hazardous context has
+#           assembled: permit + workers + changeover), but gas evidence has
+#           not confirmed. Advisory only; auto-clears if gas never rises.
+#   ALARM — the gas-gated compound score is high (context AND rising gas).
+# The gate suppresses context-only false *alarms* (§5 guardrail 5); WATCH
+# re-surfaces that same signal honestly, as pre-incident risk elevation.
+WATCH_THRESHOLD = 0.5   # on the ungated calibrated score
+ALARM_THRESHOLD = 0.5   # on the gated compound score
+
+
+def _gas_gate(f: dict[str, float]) -> float:
+    slope = min(max(float(f.get("gas_residual_slope", 0.0)), 0.0), 1.0)
+    return float(_sigmoid(GATE_K * (slope - GATE_X0)))
+
+
 class CompoundScorer:
     """§3 CompoundScorer: fit(features, labels) → predict(feature dict) → (compound, contributors)."""
 
@@ -89,19 +113,44 @@ class CompoundScorer:
 
     # -- inference ----------------------------------------------------------
     def predict(self, features: dict[str, float]) -> tuple[float, list[Contributor]]:
+        compound, _state, _ungated, contribs = self.predict_state(features)
+        return compound, contribs
+
+    def predict_state(self, features: dict[str, float],
+                      ) -> tuple[float, str, float, list[Contributor]]:
+        """Full two-tier inference → (compound, state, ungated, contributors).
+
+        state ∈ {"NORMAL", "WATCH", "ALARM"}:
+          ALARM  — gated compound ≥ ALARM_THRESHOLD (context AND rising gas);
+          WATCH  — ungated score ≥ WATCH_THRESHOLD but gas gate closed:
+                   hazardous context assembled, gas not (yet) confirming;
+          NORMAL — otherwise.
+        Monotone escalation: every input that raises `compound` also raises
+        `ungated`, so states only escalate as evidence accumulates."""
         if self._w is None:
             raise RuntimeError("CompoundScorer.predict called before fit()")
         x = _design_row(features)
-        compound = float(_sigmoid(self._a * (x @ self._w + self._b) + self._c))
-        return compound, self._contributors(features, x)
+        gate = _gas_gate(features)
+        ungated = float(_sigmoid(self._a * (x @ self._w + self._b) + self._c))
+        compound = gate * ungated
+        if compound >= ALARM_THRESHOLD:
+            state = "ALARM"
+        elif ungated >= WATCH_THRESHOLD:
+            state = "WATCH"
+        else:
+            state = "NORMAL"
+        return compound, state, ungated, self._contributors(features, x, gate)
 
-    def _contributors(self, features: dict[str, float], x: np.ndarray) -> list[Contributor]:
-        """Per-feature signed log-odds contribution (× Platt slope). Interaction
-        contributions are split half/half onto their constituent features so
-        `Contributor.feature` stays within the frozen features() keys (§3)."""
-        contrib = {k: self._a * self._w[i] * x[i] for i, k in enumerate(FEATURES)}
+    def _contributors(self, features: dict[str, float], x: np.ndarray,
+                      gate: float = 1.0) -> list[Contributor]:
+        """Per-feature signed log-odds contribution (× Platt slope × gas gate).
+        Interaction contributions are split half/half onto their constituent
+        features so `Contributor.feature` stays within the frozen features()
+        keys (§3). Scaling by the gate keeps the explanation consistent with
+        the gated score: with no rising gas, no feature 'explains' high risk."""
+        contrib = {k: gate * self._a * self._w[i] * x[i] for i, k in enumerate(FEATURES)}
         for j, (fa, fb) in enumerate(INTERACTIONS):
-            c = self._a * self._w[len(FEATURES) + j] * x[len(FEATURES) + j]
+            c = gate * self._a * self._w[len(FEATURES) + j] * x[len(FEATURES) + j]
             contrib[fa] += c / 2
             contrib[fb] += c / 2
         out = [Contributor(feature=k, value=float(features.get(k, 0.0)), weight=float(v))

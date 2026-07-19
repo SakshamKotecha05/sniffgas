@@ -31,7 +31,7 @@ def replay_sync(df: pd.DataFrame, r: "redis.Redis", zone: str, speed: float = 1.
             zone=zone,
             ppm=float(row_d["setpoint_gas1"]),
             channels={k: float(v) for k, v in row_d.items()
-                      if k.startswith("s") and k not in ("setpoint_gas1",)},
+                      if k.startswith("s") and not k.startswith("setpoint")},
         )
         r.xadd(STREAM_SENSOR, {"data": dumps(tick)})
 
@@ -66,7 +66,7 @@ def run_scenario(path: str, r: "redis.Redis", zone: str = "Z1",
             zone=zone,
             ppm=float(row_d["setpoint_gas1"]),
             channels={k: float(v) for k, v in row_d.items()
-                      if k.startswith("s") and k not in ("setpoint_gas1",)},
+                      if k.startswith("s") and not k.startswith("setpoint")},
         )
         r.xadd(STREAM_SENSOR, {"data": dumps(tick)})
 
