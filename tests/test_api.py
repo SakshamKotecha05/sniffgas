@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from api.main import app, push_risk_score, REPORTS
+from api.main import app, push_risk_score, REPORTS, _upgrade_report
 from tests.helpers import make_risk_score
 
 
@@ -17,6 +17,26 @@ def test_get_report():
     client = TestClient(app)
     assert client.get("/reports/rpt-001").json()["structured"]["severity"] == "high"
     assert client.get("/reports/rpt-999").status_code == 404
+
+
+def test_upgrade_report_swaps_canned_for_live_and_keeps_subgraph():
+    """Live cited report replaces the canned one when the agent succeeds; the
+    subgraph (drill-down payload) is preserved so GET /reports stays whole."""
+    score = make_risk_score(compound=0.9, level="red")
+    REPORTS["rpt-x"] = {"narrative": "canned", "subgraph": score.subgraph}
+    _upgrade_report("rpt-x", score, gen=lambda ctx, clauses, fallback: {
+        "narrative": f"live report for {ctx['zone']}", "structured": {"zone": ctx["zone"]}})
+    assert REPORTS["rpt-x"]["narrative"] == "live report for Z1"
+    assert REPORTS["rpt-x"]["subgraph"] == score.subgraph
+
+
+def test_upgrade_report_is_noop_without_api_key(monkeypatch):
+    """No key -> no live attempt; the canned report is left untouched (safe demo default)."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    score = make_risk_score(compound=0.9, level="red")
+    REPORTS["rpt-y"] = {"narrative": "canned"}
+    _upgrade_report("rpt-y", score)
+    assert REPORTS["rpt-y"]["narrative"] == "canned"
 
 
 def test_red_crossing_fires_alert_once():

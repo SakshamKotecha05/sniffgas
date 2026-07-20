@@ -1,6 +1,9 @@
 """API gateway (Task 10): WS /live pushing RiskScore/Alert JSON verbatim,
 GET /reports/{id}, static-serves web/dist as Vercel fallback."""
 import asyncio
+import json
+import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -26,6 +29,33 @@ def push_risk_score(model: BaseModel) -> None:
 
 _last_level: dict[str, str] = {}  # zone -> last seen level, for red-crossing detection
 
+_CORPUS = Path(__file__).parent.parent / "agent" / "corpus" / "clauses.json"
+
+
+def _upgrade_report(rid, score, *, gen=None) -> None:
+    """Best-effort: replace the canned report with agent/report.py's two-call cited
+    one. Any failure (no key, timeout, unverifiable citation) leaves the canned
+    report in place (plan.md §8 fallback). Runs off-thread so a slow Groq call never
+    blocks the evacuation alert. `gen(ctx, clauses, fallback)` is injectable for tests."""
+    if gen is None:
+        if not os.environ.get("GROQ_API_KEY"):
+            return
+        from groq import Groq
+
+        from agent.report import generate_report
+        client = Groq()
+        gen = lambda ctx, clauses, fb: generate_report(client, ctx, clauses, fallback=fb)
+    try:
+        clauses = json.loads(_CORPUS.read_text())
+        ctx = {"zone": score.zone, "ts": score.ts.isoformat(), "compound": score.compound,
+               "level": score.level, "state": score.state, "ppm": score.ppm,
+               "contributors": [c.model_dump() for c in score.contributors]}
+        live = gen(ctx, clauses, None)
+        if live:  # None on any failure -> canned report stays put
+            REPORTS[rid] = {**live, "subgraph": score.subgraph}
+    except Exception:  # ponytail: live-path failure keeps the canned report (Q12)
+        pass
+
 
 def push_with_alerts(score) -> None:
     """push_risk_score + fire one evacuation Alert per crossing into red."""
@@ -37,8 +67,9 @@ def push_with_alerts(score) -> None:
         return
     rid = f"rpt-{score.zone}-{score.ts:%H%M%S}"
     top = sorted(score.contributors, key=lambda c: abs(c.weight), reverse=True)[:5]
-    # ponytail: canned report from the score itself; swap for agent/report.py's
-    # two-call cited generation when the demo box has GROQ_API_KEY wired here.
+    # Canned report + alert fire immediately (instant, always available); the live
+    # cited report then upgrades REPORTS[rid] off-thread, falling back to this canned
+    # copy on any failure. So GET /reports/{id} always resolves, live or not.
     REPORTS[rid] = {
         "structured": {"zone": score.zone, "ts": score.ts.isoformat(),
                        "compound": score.compound, "severity": "high"},
@@ -52,6 +83,7 @@ def push_with_alerts(score) -> None:
     }
     push_risk_score(Alert(ts=score.ts, zone=score.zone, kind="evacuation",
                           compound=score.compound, report_id=rid))
+    threading.Thread(target=_upgrade_report, args=(rid, score), daemon=True).start()
 
 
 @app.websocket("/live")
@@ -86,8 +118,6 @@ if _dist.is_dir():  # Vercel fallback: serve the built dashboard if present
 
 
 if __name__ == "__main__":  # `python -m api.main` — demo runner: gateway + fusion feed
-    import threading
-
     import uvicorn
 
     from api.feed import start_feed  # deferred: keeps TestClient imports sklearn-free
