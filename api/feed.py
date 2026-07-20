@@ -42,7 +42,7 @@ def score_tick(tick: SensorTick, anomaly: float,
     if state == "WATCH" and level == "green":
         level = "amber"  # pre-incident advisory: context assembled, gas not yet confirming
     return RiskScore(ts=tick.ts, zone=tick.zone, anomaly=anomaly,
-                     compound=compound, level=level, state=state,
+                     compound=compound, level=level, state=state, ppm=tick.ppm,
                      contributors=contributors, subgraph=g.subgraph(tick.zone))
 
 

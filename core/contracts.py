@@ -42,6 +42,7 @@ class RiskScore(BaseModel):
     compound: float = Field(ge=0, le=1)
     level: Literal["green", "amber", "red"]   # thresholds live in core/eval/labels.py (frozen Jul 9, in the hash), NOT here — derived on the validation split at the matched-precision operating point
     state: Literal["NORMAL", "WATCH", "ALARM"] = "NORMAL"  # ISA-18.2-style two-tier (fusion.predict_state); WATCH = context assembled, gas not yet confirming — additive default, no consumer breaks
+    ppm: float | None = Field(default=None, ge=0)  # ADR 0003: the zone's CO setpoint at score time (ADR 0002), rides here so the dial + level come from one message — additive default, no consumer breaks
     contributors: list[Contributor]
     subgraph: dict                 # {"nodes": [...], "edges": [...]} — "why red" drill-down
 

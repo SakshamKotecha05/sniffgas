@@ -35,6 +35,14 @@ def test_score_tick_returns_valid_riskscore_and_context_raises_risk():
     assert any(c.feature == "hot_work_active" for c in hot.contributors)
 
 
+def test_score_tick_carries_setpoint_ppm_for_the_dial():
+    """ADR 0003: the CO dial reads RiskScore.ppm, so score_tick forwards the
+    tick's CO setpoint verbatim — no model in the path (ADR 0002)."""
+    g, scorer = PlantGraph(DEMO_LAYOUT), train_demo_scorer()
+    hot = SensorTick(ts=NOW, zone="Z1", ppm=412.0, channels={"s01": 10.0})
+    assert score_tick(hot, anomaly=0.5, g=g, scorer=scorer).ppm == 412.0
+
+
 def test_watch_state_surfaces_as_amber_before_gas_confirms():
     """Killer-moment beat: context assembles while gas is quiet -> WATCH/amber
     (advisory), then gas slope opens the gate -> ALARM. Gate keeps the *alarm*
