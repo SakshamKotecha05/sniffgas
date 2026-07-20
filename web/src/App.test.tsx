@@ -52,6 +52,23 @@ test("clicking a zone opens drill-down with contributors", () => {
   expect(screen.getByTestId("contrib-temp_c")).toBeTruthy();
 });
 
+test("CO dial alarms when a live zone reports ppm at/above STEL 400", () => {
+  vi.stubGlobal("WebSocket", FakeWS as unknown as typeof WebSocket);
+  render(<App />);
+  expect(screen.getByTestId("co-dial").dataset.state).toBe("normal");
+  act(() =>
+    FakeWS.last!.onmessage!({
+      data: JSON.stringify({
+        ts: "2026-07-19T00:00:00Z", zone: "Z1", anomaly: 0.55, compound: 0.91,
+        level: "red", ppm: 452, contributors: [], subgraph: { nodes: [], edges: [] },
+      }),
+    }),
+  );
+  const dial = screen.getByTestId("co-dial");
+  expect(dial.dataset.state).toBe("alarm");
+  expect(dial.textContent).toMatch(/452/);
+});
+
 test("evacuation alert shows banner; acknowledge dismisses it", () => {
   vi.stubGlobal("WebSocket", FakeWS as unknown as typeof WebSocket);
   render(<App />);

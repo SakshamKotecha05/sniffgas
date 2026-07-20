@@ -32,6 +32,7 @@ export interface RiskScore {
   compound: number;
   level: Level;
   state?: RiskState; // optional: tolerate pre-two-tier payloads (defaults NORMAL)
+  ppm?: number; // ADR 0003: zone CO setpoint at score time, drives CoDial; optional like state
   contributors: Contributor[];
   subgraph: { nodes?: SubgraphNode[]; edges?: SubgraphEdge[] };
 }
