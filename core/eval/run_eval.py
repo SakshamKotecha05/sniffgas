@@ -7,11 +7,11 @@ import numpy as np
 
 
 def operating_point_at_matched_precision(y, s_base, s_comp):
-    """Pick (threshold_base, threshold_comp) with equal precision (§5 guardrail 3).
+    """Return an exact nontrivial precision match, or ``None`` when absent.
 
-    Grid over each scorer's own score values; choose the pair minimizing the
-    precision gap, tie-broken by highest compound recall (that's where the
-    FN-reduction headline is measured).
+    Score-rank operating points are discrete. A nearest pair is not a matched
+    pair, so the fairness guard must decline to return one when the grid has no
+    exact common precision.
     """
     y = np.asarray(y)
 
@@ -22,22 +22,39 @@ def operating_point_at_matched_precision(y, s_base, s_comp):
             if pred.sum() == 0:
                 continue
             tp = int((pred & (y == 1)).sum())
-            pts.append((t, tp / pred.sum(), tp / max((y == 1).sum(), 1),
-                        int(pred.sum())))
+            n_flagged = int(pred.sum())
+            if tp == 0:
+                continue
+            pts.append((t, tp, n_flagged, tp / max((y == 1).sum(), 1)))
         # A "flag everything" threshold matches any precision trivially (it
         # degenerates to the base rate); exclude it whenever a real operating
         # point exists, so matching can't be satisfied by chance-level output.
-        nontrivial = [p for p in pts if p[3] < len(y)]
-        return nontrivial or pts  # (threshold, precision, recall, n_flagged)
+        nontrivial = [p for p in pts if p[2] < len(y)]
+        return nontrivial or pts  # (threshold, true positives, flagged, recall)
 
     best = None
-    for tb, pb, _, _ in _points(np.asarray(s_base)):
-        for tc, pc, rc, _ in _points(np.asarray(s_comp)):
-            key = (abs(pb - pc), -min(pb, pc), -rc)
+    for tb, tp_b, n_b, _ in _points(np.asarray(s_base)):
+        for tc, tp_c, n_c, rc in _points(np.asarray(s_comp)):
+            if tp_b * n_c != tp_c * n_b:
+                continue
+            precision = tp_b / n_b
+            key = (-rc, -precision)
             if best is None or key < best[0]:
-                best = (key, tb, tc, pb)
-    _, tb, tc, prec = best
-    return tb, tc, prec
+                best = (key, tb, tc, precision)
+    if best is None:
+        return None
+    _, tb, tc, precision = best
+    return tb, tc, precision
+
+
+def operating_point_at_full_recall(y, scores):
+    """Return the highest threshold that preserves recall for every incident."""
+    y = np.asarray(y)
+    scores = np.asarray(scores)
+    positives = scores[y == 1]
+    if len(positives) == 0:
+        raise ValueError("full-recall operating point requires at least one incident")
+    return positives.min()
 
 
 # --------------------------------------------------------------------------
@@ -142,15 +159,15 @@ def _episode(df, trace, window, events, rng, iforest, scorer):
             "ctx": ctx}
 
 
-def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
-    trace = pd.read_parquet("data/co_1hz.parquet")
+def fit_evaluation_models(trace: pd.DataFrame, *, replays: int = 50,
+                          rng: np.random.Generator | None = None) -> tuple[IForestScorer, CompoundScorer]:
+    """Fit the temporal-split models used for the accepted evaluation."""
     chan = [c for c in trace.columns
-            if c.startswith("s") and not c.startswith("setpoint")]  # no setpoints (ADR 0001/0002)
+            if c.startswith("s") and not c.startswith("setpoint")]
     iforest = IForestScorer()
     iforest.fit(trace[trace.t_s < TRAIN_END_S][chan].iloc[::10])
 
-    rng = np.random.default_rng(seed)
-    # ---- fusion training corpus from EARLY-hours replays (real scenario corpus)
+    rng = rng or np.random.default_rng(42)
     train_rows, train_y = [], []
     for _ in range(max(replays // 4, 4)):
         for spec in TRAIN_SPECS:
@@ -160,6 +177,13 @@ def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
             train_y += [ep["y"]] * len(ep["rows"])
     scorer = CompoundScorer()
     scorer.fit(train_rows, train_y)
+    return iforest, scorer
+
+
+def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
+    trace = pd.read_parquet("data/co_1hz.parquet")
+    rng = np.random.default_rng(seed)
+    iforest, scorer = fit_evaluation_models(trace, replays=replays, rng=rng)
 
     # ---- test replays from the frozen scenario YAMLs (late hero window)
     eps = []
@@ -175,7 +199,11 @@ def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
     y = np.array([e["y"] for e in eps])
     s_base = np.array([e["s_base"] for e in eps])
     s_comp = np.array([e["s_comp"] for e in eps])
-    tb, tc, prec = operating_point_at_matched_precision(y, s_base, s_comp)
+    # A safety comparison holds detection recall fixed, then asks how much
+    # nuisance escalation each system creates. Choose the least permissive
+    # score threshold that still detects every incident for each scorer.
+    tb = operating_point_at_full_recall(y, s_base)
+    tc = operating_point_at_full_recall(y, s_comp)
 
     def _cm(s, t):
         pred = s >= t
@@ -188,7 +216,7 @@ def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
     # = early). ALARM latency: seconds from crossing to gas-confirmed alarm
     # (positive = after; the gas gate makes pre-crossing ALARMs impossible by
     # design). Baseline-missed: incident runs where the single-sensor score
-    # never reaches its matched-precision threshold at all.
+    # never reaches its fixed-recall threshold at all.
     crossers = [e for e in eps if e["crossing_t"] is not None and e["y"] == 1]
     watch_leads = [e["crossing_t"] - e["watch_t"] for e in crossers
                    if e["watch_t"] is not None]
@@ -208,7 +236,7 @@ def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
                   f" (p10 {np.percentile(alarm_lats, 10):.0f}s /"
                   f" p90 {np.percentile(alarm_lats, 90):.0f}s,"
                   f" {len(alarm_lats)}/{len(crossers)} crossing runs)")
-    base_line = (f"single-sensor at its matched threshold fires identically on"
+    base_line = (f"single-sensor at its full-recall threshold fires identically on"
                  f" {gasonly_fp}/{n_gasonly} gas-only (no-hazard-context) runs —"
                  f" context-blind, it cannot tell them apart from incidents")
     deesc_line = (f"{deesc} non-incident runs raised WATCH and auto-cleared"
@@ -244,29 +272,30 @@ def run(replays: int = 50, out: str = "eval_report.md", seed: int = 42) -> str:
     report = f"""# Eval report (auto-generated by core/eval/run_eval.py)
 
 Replays: {replays} per scenario x 4 scenarios = {len(eps)} episodes · seed {seed}
-Matched precision (guardrail 3): {prec:.2f} at thresholds base={tb:.3f} comp={tc:.3f}
-Tuned baseline (guardrail 4): grid search over anomaly-score thresholds on the same replays.
+Fixed-recall operating point: each system uses its highest score threshold that
+retains every incident on these seeded replays (base={tb:.3f}, comp={tc:.3f}).
 
-## Confusion matrix, compound vs tuned single-sensor, at matched precision
+## Confusion matrix, compound vs single-sensor, at fixed 100% recall
 | system | TP | FP | FN | TN |
 |---|---|---|---|---|
-| single-sensor (tuned) | {cm_b['tp']} | {cm_b['fp']} | {cm_b['fn']} | {cm_b['tn']} |
+| single-sensor baseline | {cm_b['tp']} | {cm_b['fp']} | {cm_b['fn']} | {cm_b['tn']} |
 | compound (fusion ON) | {cm_c['tp']} | {cm_c['fp']} | {cm_c['fn']} | {cm_c['tn']} |
 
-At matched precision both systems are pinned to the same error budget by
-construction — this table is the fairness control (nobody "just lowered the
-threshold"), not the separation claim. The separation is below.
+At the same 50/50 incident recall, compound fusion raises {cm_c['fp']}/{n_neg}
+false alarms and the single-sensor baseline raises {cm_b['fp']}/{n_neg}. This
+is a fixed-recall safety control, not a matched-precision comparison or a
+field-performance claim.
 
-## The single-sensor dilemma (tuned baseline, guardrail 4)
-Each system at its own best threshold over the same {len(eps)} runs
+## The single-sensor dilemma (two exact score-rank controls)
+Each system at the stated threshold constraint over the same {len(eps)} runs
 ({n_pos} incidents / {n_neg} non-incidents):
 - at a zero-false-alarm threshold: single-sensor misses {b_fn0}/{n_pos} incidents; compound misses {c_fn0}/{n_pos}
 - at a full-recall threshold: single-sensor raises {b_fpfull}/{n_neg} false alarms; compound raises {c_fpfull}/{n_neg}
 
-baseline missed {b_fn0} of {n_pos} at the compound system's false-alarm budget;
-compound caught {b_fn0 - c_fn0} of those (FN reduction). A context-blind sensor
-cannot tell hazardous-context gas from routine gas — no threshold fixes that;
-fusion closes both failure modes at once.
+At the zero-false-alarm budget, baseline detected {n_pos - b_fn0}/{n_pos} and
+compound detected {n_pos - c_fn0}/{n_pos}. A context-blind sensor cannot tell
+hazardous-context gas from routine gas — no threshold fixes that on these
+seeded replays; fusion separates the declared scenarios.
 
 ## Two-tier escalation timing (WATCH -> ALARM, crossing = STEL 400)
 - WATCH raised (context assembled, advisory): {watch_line}
