@@ -13,3 +13,14 @@ def test_hot_work_and_hops():
     assert f["ignition_within_2_hops"] == 1.0
     assert set(f) == {"anomaly", "gas_residual_slope", "hot_work_active", "maintenance_in_zone",
                       "shift_changeover", "worker_count_in_zone", "ignition_within_2_hops"}
+
+
+def test_demo_subgraph_uses_the_floor_plan_zone_labels():
+    graph = PlantGraph(DEMO_LAYOUT)
+    labels = {node["id"]: node["label"] for node in graph.subgraph("Z1")["nodes"] if node["type"] == "zone"}
+
+    assert labels == {
+        "Z1": "Coke Oven Battery",
+        "Z2": "Blast Furnace",
+        "Z3": "Casting Bay",
+    }

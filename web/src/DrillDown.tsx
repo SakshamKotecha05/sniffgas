@@ -1,28 +1,64 @@
-// Drill-down panel — latest RiskScore for the selected zone: level badge,
-// compound/anomaly readouts, contributor bars, "why red" subgraph node-link
-// render (plain SVG; no graph lib — plan.md Task 12 / D8).
-import type { Level, RiskScore, SubgraphNode } from "./ws";
+// Drill-down panel — the latest RiskScore is translated into a readable, signed
+// evidence trail. It remains a view over the frozen payload; no risk logic lives here.
+import { operationalStatus } from "./riskDisplay";
+import type { Contributor, Level, RiskScore, SubgraphNode } from "./ws";
 
-const BADGE: Record<Level, string> = {
-  green: "bg-green-100 text-green-800",
-  amber: "bg-amber-100 text-amber-800",
-  red: "bg-red-100 text-red-800",
-};
-
-const BAR: Record<Level, string> = {
-  green: "bg-green-500",
-  amber: "bg-amber-500",
-  red: "bg-red-500",
-};
-
-// Node fill by kg.py node type; permits/ignition pop, plumbing stays muted.
 const NODE_FILL: Record<string, string> = {
-  zone: "#475569", // slate-600
-  sensor: "#0ea5e9", // sky-500
-  ignition: "#f97316", // orange-500
-  worker_group: "#10b981", // emerald-500
-  permit: "#e11d48", // rose-600
+  zone: "#94a3b8",
+  sensor: "#38bdf8",
+  ignition: "#fb923c",
+  worker_group: "#34d399",
+  permit: "#f472b6",
 };
+
+const NODE_LABEL: Record<string, string> = {
+  zone: "Zone",
+  sensor: "Sensor",
+  ignition: "Ignition source",
+  worker_group: "Crew",
+  permit: "Permit",
+};
+
+const FEATURE_LABEL: Record<string, string> = {
+  anomaly: "Gas-pattern anomaly",
+  gas_residual_slope: "Gas residual slope",
+  hot_work_active: "Active hot-work permit",
+  maintenance_in_zone: "Maintenance in zone",
+  shift_changeover: "Shift changeover",
+  worker_count_in_zone: "Crew count in zone",
+  ignition_within_2_hops: "Ignition source nearby",
+  co_ppm: "CO concentration",
+  temp_c: "Process temperature",
+  ppm_slope: "CO rise rate",
+};
+
+const toneForLevel: Record<Level, string> = {
+  green: "normal",
+  amber: "watch",
+  red: "alarm",
+};
+
+function featureLabel(feature: string) {
+  return FEATURE_LABEL[feature] ?? feature.replace(/_/g, " ");
+}
+
+function signedDirection(weight: number) {
+  if (weight > 0) return "increases risk";
+  if (weight < 0) return "reduces risk";
+  return "neutral weighting";
+}
+
+function formatTimestamp(ts: string) {
+  const date = new Date(ts);
+  if (Number.isNaN(date.valueOf())) return ts;
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
 
 function SubgraphView({
   zone,
@@ -36,78 +72,98 @@ function SubgraphView({
   level: Level;
 }) {
   const placed = nodes.filter(
-    (n): n is SubgraphNode & { x: number; y: number } =>
-      typeof n.x === "number" && typeof n.y === "number",
+    (node): node is SubgraphNode & { x: number; y: number } =>
+      typeof node.x === "number" && typeof node.y === "number",
   );
   if (placed.length === 0) return null;
 
-  // Fit floor-plan px coords into the panel: pad the bounding box, let SVG scale.
   const PAD = 46;
-  const xs = placed.map((n) => n.x);
-  const ys = placed.map((n) => n.y);
+  const xs = placed.map((node) => node.x);
+  const ys = placed.map((node) => node.y);
   const minX = Math.min(...xs) - PAD;
   const minY = Math.min(...ys) - PAD;
   const w = Math.max(...xs) - minX + PAD;
   const h = Math.max(...ys) - minY + PAD;
-  const pos = new Map(placed.map((n) => [n.id, n]));
+  const pos = new Map(placed.map((node) => [node.id, node]));
+  const types = [...new Set(placed.map((node) => node.type).filter((type): type is string => Boolean(type)))];
 
   return (
-    <svg
-      data-testid="drilldown-subgraph"
-      viewBox={`${minX} ${minY} ${w} ${h}`}
-      className="mt-1 w-full rounded bg-slate-50"
-      role="img"
-      aria-label={`Risk subgraph around ${zone}`}
-    >
-      {edges.map((e) => {
-        const a = pos.get(e.source);
-        const b = pos.get(e.target);
-        if (!a || !b) return null;
-        return (
-          <line
-            key={`${e.source}-${e.target}`}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x}
-            y2={b.y}
-            stroke="#cbd5e1"
-            strokeWidth={2}
-          />
-        );
-      })}
-      {placed.map((n) => {
-        const isFocus = n.id === zone;
-        return (
-          <g key={n.id} data-testid={`sg-node-${n.id}`}>
-            {isFocus && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={22}
-                fill="none"
-                stroke={level === "red" ? "#ef4444" : level === "amber" ? "#f59e0b" : "#22c55e"}
-                strokeWidth={4}
-              />
-            )}
-            <circle
-              cx={n.x}
-              cy={n.y}
-              r={n.type === "zone" ? 15 : 10}
-              fill={NODE_FILL[n.type ?? ""] ?? "#94a3b8"}
+    <div className="subgraph-shell">
+      <div className="subgraph-legend" aria-label="Risk subgraph legend">
+        {types.map((type) => (
+          <span key={type}>
+            <i aria-hidden="true" style={{ backgroundColor: NODE_FILL[type] ?? "#94a3b8" }} />
+            {NODE_LABEL[type] ?? type}
+          </span>
+        ))}
+      </div>
+      <svg
+        data-testid="drilldown-subgraph"
+        viewBox={`${minX} ${minY} ${w} ${h}`}
+        className="subgraph-view"
+        role="img"
+        aria-label={`Risk subgraph around ${zone}`}
+      >
+        {edges.map((edge) => {
+          const source = pos.get(edge.source);
+          const target = pos.get(edge.target);
+          if (!source || !target) return null;
+          return (
+            <line
+              key={`${edge.source}-${edge.target}`}
+              x1={source.x}
+              y1={source.y}
+              x2={target.x}
+              y2={target.y}
+              stroke="#64748b"
+              strokeOpacity=".7"
+              strokeWidth={2}
             />
-            <text
-              x={n.x}
-              y={n.y + (n.type === "zone" ? 32 : 26)}
-              textAnchor="middle"
-              fontSize={13}
-              fill="#334155"
-            >
-              {n.label ?? n.id}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+          );
+        })}
+        {placed.map((node) => {
+          const isFocus = node.id === zone;
+          const halo = level === "red" ? "#fb7185" : level === "amber" ? "#fbbf24" : "#4ade80";
+          return (
+            <g key={node.id} data-testid={`sg-node-${node.id}`}>
+              {isFocus && <circle cx={node.x} cy={node.y} r={23} fill="none" stroke={halo} strokeWidth={3.5} />}
+              <circle cx={node.x} cy={node.y} r={node.type === "zone" ? 14 : 10} fill={NODE_FILL[node.type ?? ""] ?? "#94a3b8"} />
+              <text x={node.x} y={node.y + (node.type === "zone" ? 31 : 25)} textAnchor="middle" fontSize={12} fill="#e2e8f0">
+                {node.label ?? node.id}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p className="subgraph-summary">
+        Linked safety factors: {types.map((type) => NODE_LABEL[type] ?? type).join(", ")}.
+      </p>
+    </div>
+  );
+}
+
+function ContributorRow({ contributor, maxWeight }: { contributor: Contributor; maxWeight: number }) {
+  const direction = signedDirection(contributor.weight);
+  const directionClass = contributor.weight > 0 ? "positive" : contributor.weight < 0 ? "negative" : "neutral";
+  return (
+    <li key={contributor.feature} data-testid={`contrib-${contributor.feature}`} className="contributor-row">
+      <div className="contributor-heading">
+        <span>{featureLabel(contributor.feature)}</span>
+        <span data-testid={`contrib-direction-${contributor.feature}`} className={`contributor-direction ${directionClass}`}>
+          {contributor.weight > 0 ? "↑" : contributor.weight < 0 ? "↓" : "→"} {direction}
+        </span>
+      </div>
+      <div className="contributor-meta">
+        <span>observed {contributor.value.toFixed(1)}</span>
+        <span>model weight {contributor.weight >= 0 ? "+" : ""}{contributor.weight.toFixed(2)}</span>
+      </div>
+      <div className="contributor-track" aria-hidden="true">
+        <div
+          className={`contributor-fill ${directionClass}`}
+          style={{ width: `${(Math.abs(contributor.weight) / maxWeight) * 100}%` }}
+        />
+      </div>
+    </li>
   );
 }
 
@@ -120,91 +176,88 @@ export default function DrillDown({
 }) {
   if (!zone) {
     return (
-      <aside data-testid="drilldown" className="w-full max-w-sm rounded-lg bg-white p-4 shadow">
-        <p className="text-sm text-slate-500">Select a zone to inspect its risk drivers.</p>
+      <aside data-testid="drilldown" className="glass-panel drilldown-panel drilldown-empty">
+        <p className="eyebrow">Evidence drill-down</p>
+        <h2 className="panel-title">Choose a plant zone</h2>
+        <p>Select a zone on the floor plan to inspect its live drivers and connected safety context.</p>
       </aside>
     );
   }
 
   if (!score) {
     return (
-      <aside data-testid="drilldown" className="w-full max-w-sm rounded-lg bg-white p-4 shadow">
-        <h2 className="mb-1 text-lg font-semibold text-slate-800">{zone}</h2>
-        <p className="text-sm text-slate-500">No risk scores received for this zone yet.</p>
+      <aside data-testid="drilldown" className="glass-panel drilldown-panel drilldown-empty">
+        <p className="eyebrow">Evidence drill-down · {zone}</p>
+        <h2 className="panel-title">Awaiting this zone’s score</h2>
+        <p>No risk score has arrived for {zone}. Unknown is not treated as a normal state.</p>
       </aside>
     );
   }
 
-  const maxW = Math.max(...score.contributors.map((c) => Math.abs(c.weight)), 1e-9);
+  const status = operationalStatus(score);
+  const sortedContributors = [...score.contributors]
+    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+    .slice(0, 5);
+  const maxWeight = Math.max(...sortedContributors.map((contributor) => Math.abs(contributor.weight)), 1e-9);
+  const lead = sortedContributors.find((contributor) => contributor.weight !== 0);
 
   return (
-    <aside data-testid="drilldown" className="w-full max-w-sm rounded-lg bg-white p-4 shadow">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">{zone}</h2>
-        <span
-          data-testid="drilldown-level"
-          className={`rounded px-2 py-0.5 text-xs font-medium uppercase ${BADGE[score.level]}`}
-        >
-          {score.level}
+    <aside data-testid="drilldown" className={`glass-panel drilldown-panel drilldown-${toneForLevel[score.level]}`}>
+      <div className="panel-topline">
+        <div>
+          <p className="eyebrow">Evidence drill-down</p>
+          <h2 className="panel-title">{zone} risk trail</h2>
+        </div>
+        <span data-testid="drilldown-level" className={`risk-chip risk-chip-${status.tone}`}>
+          {status.label}
         </span>
       </div>
 
-      <dl className="mb-3 grid grid-cols-2 gap-2 text-sm">
+      <dl className="risk-metrics">
         <div>
-          <dt className="text-slate-500">Compound risk</dt>
-          <dd data-testid="drilldown-compound" className="font-mono text-slate-800">
-            {score.compound.toFixed(2)}
-          </dd>
+          <dt>Compound risk</dt>
+          <dd data-testid="drilldown-compound">{score.compound.toFixed(2)}</dd>
         </div>
         <div>
-          <dt className="text-slate-500">Anomaly</dt>
-          <dd className="font-mono text-slate-800">{score.anomaly.toFixed(2)}</dd>
+          <dt>Gas anomaly</dt>
+          <dd>{score.anomaly.toFixed(2)}</dd>
         </div>
       </dl>
 
-      <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-        Top contributors
-      </h3>
-      {score.contributors.length === 0 ? (
-        <p className="text-sm text-slate-400">None reported.</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {[...score.contributors]
-            .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-            .slice(0, 5)
-            .map((c) => (
-              <li key={c.feature} data-testid={`contrib-${c.feature}`} className="text-sm">
-                <div className="flex justify-between text-slate-700">
-                  <span>{c.feature}</span>
-                  <span className="font-mono text-xs text-slate-500">
-                    {c.value.toFixed(1)} · w {c.weight.toFixed(2)}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full rounded bg-slate-100">
-                  <div
-                    className={`h-1.5 rounded ${BAR[score.level]}`}
-                    style={{ width: `${(Math.abs(c.weight) / maxW) * 100}%` }}
-                  />
-                </div>
-              </li>
+      <section data-testid="why-risk" className="why-card" aria-label="Why this risk state">
+        <p className="eyebrow">Why this state</p>
+        <p>
+          {lead
+            ? `${status.label} in ${zone} is led by ${featureLabel(lead.feature).toLowerCase()} (${signedDirection(lead.weight)}).`
+            : `${status.label} in ${zone} has no contributor details yet.`}
+        </p>
+      </section>
+
+      <section className="contributors-section" aria-labelledby="contributors-title">
+        <h3 id="contributors-title" className="section-label">Top model contributors</h3>
+        {sortedContributors.length === 0 ? (
+          <p className="empty-copy">None reported.</p>
+        ) : (
+          <ul className="contributors-list">
+            {sortedContributors.map((contributor) => (
+              <ContributorRow key={contributor.feature} contributor={contributor} maxWeight={maxWeight} />
             ))}
-        </ul>
-      )}
+          </ul>
+        )}
+      </section>
 
       {(score.subgraph.nodes?.length ?? 0) > 0 && (
-        <>
-          <h3 className="mb-1 mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">
-            Risk subgraph (2-hop)
-          </h3>
+        <section className="subgraph-section" aria-labelledby="subgraph-title">
+          <h3 id="subgraph-title" className="section-label">Connected safety context · 2 hops</h3>
           <SubgraphView
             zone={zone}
             nodes={score.subgraph.nodes ?? []}
             edges={score.subgraph.edges ?? []}
             level={score.level}
           />
-        </>
+        </section>
       )}
-      <p className="mt-2 text-right text-[10px] text-slate-400">as of {score.ts}</p>
+      <p className="as-of">Score time · {formatTimestamp(score.ts)}</p>
     </aside>
   );
 }

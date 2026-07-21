@@ -5,13 +5,11 @@ Logistic regression with explicit interaction terms and sign-constrained
 by construction. Platt-calibrated. Right-sized for ~74 positives / 7 features.
 LightGBM is stretch/ablation only (Q8) and is deliberately NOT here.
 
-Training corpus: Task 3's scenario YAMLs (sim/scenarios/*.yaml) do not exist
-yet, so `train_demo_scorer` seeds samples from the four frozen scenario
-archetypes (compound / gas_only / context_only / quiet) labeled by the Task 6
-conjunction rule: positive iff gas anomaly AND hazardous context co-occur.
-When Task 3 lands, swap `_seed_corpus` to consume the YAMLs — the archetype
-shapes below mirror them (hero: permit_active + worker_pos(4) + shift_change
-landing during the green 280 ppm climb).
+The model of record is fit by core/eval/run_eval.py::fit_evaluation_models on
+temporal-split replays of sim/scenarios/*.yaml. `train_demo_scorer` below is
+the offline/test fixture: it seeds the same four scenario archetypes (compound
+/ gas_only / context_only / quiet) under the Task 6 conjunction rule —
+positive iff gas anomaly AND hazardous context co-occur.
 """
 import numpy as np
 from scipy.optimize import minimize
@@ -158,7 +156,7 @@ class CompoundScorer:
         return sorted(out, key=lambda c: c.weight, reverse=True)
 
 
-# -- seeded demo corpus (stand-in for Task 3 YAML replays; see module docstring) --
+# -- seeded offline/test corpus mirroring the scenario archetypes (see docstring) --
 def _seed_corpus(rng: np.random.Generator,
                  n_pos: int = 74, n_neg_each: int = 60) -> tuple[list[dict], list[int]]:
     rows, y = [], []

@@ -1,0 +1,20 @@
+{
+  "Z1": {
+    "narrative": "Prototype response recommendation for Zone Z1: pause active hot work, account for personnel, verify the atmosphere, and have the designated incident lead assess evacuation under plant procedures. The cited hazardous-process and work-permit sources provide context for this rehearsal; they do not replace plant-specific emergency instructions. [fa-41b] [fa-41c] [fa-41h] [oisd-105]",
+    "structured": {
+      "zone": "Z1",
+      "permit_ids": [],
+      "clause_ids": ["fa-41b", "fa-41c", "fa-41h", "oisd-105"],
+      "actions": [
+        "Notify the designated incident lead to assess evacuation and account for personnel at the designated muster point.",
+        "Suspend hot work and isolate ignition sources until the atmosphere is verified safe.",
+        "Record the event, preserve the sensor and permit timeline, and authorize re-entry only after competent review."
+      ],
+      "timeline": [
+        "0 min — Aegis Command enters ALARM and presents a local response recommendation.",
+        "0–5 min — secure the permit boundary, verify personnel accountability, and reassess the atmosphere.",
+        "Before re-entry — competent review confirms controls and the permit conditions."
+      ]
+    }
+  }
+}

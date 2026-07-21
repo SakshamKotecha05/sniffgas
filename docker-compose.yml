@@ -1,16 +1,21 @@
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
 
   app:
     build: .
     depends_on:
       - redis
-    env_file:
-      - .env
     environment:
       - REDIS_URL=redis://redis:6379
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     ports:
       - "8000:8000"
+    # data/ is gitignored (350 MB UCI download + derived parquet), so it is
+    # bind-mounted, not baked in. First run downloads and prepares it once.
+    volumes:
+      - ./data:/app/data
+    command: >
+      sh -c "test -f data/co_1hz.parquet || python data/prepare.py co;
+             (sleep 10; while :; do python -m sim.replay --scenario sim/scenarios/compound.yaml --speed 5; done) &
+             exec python -m api.main"

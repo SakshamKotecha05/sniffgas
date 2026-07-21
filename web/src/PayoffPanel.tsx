@@ -59,8 +59,8 @@ export default function PayoffPanel() {
           <p>hazardous episodes caught by both systems</p>
         </div>
         <div>
-          <span className="metric-value">140 → 0</span>
-          <p>false positives with compound fusion</p>
+          <span className="metric-value">140 / 150 → 0 / 150</span>
+          <p>false positives at fixed full recall</p>
         </div>
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-400">

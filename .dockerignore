@@ -8,4 +8,8 @@ data/*.txt
 data/*.parquet
 data/*.png
 .DS_Store
+.env
+.env.*
 .claude/
+web/node_modules/
+web/dist/

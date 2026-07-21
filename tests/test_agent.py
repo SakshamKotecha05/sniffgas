@@ -57,24 +57,36 @@ def test_corpus_schema():
         (Path(__file__).parent.parent / "agent" / "corpus" / "clauses.json")
         .read_text())
     assert clauses, "corpus must not be empty"
-    keys = {"id", "title", "text", "source_url", "retrieved", "checked_by"}
+    keys = {"id", "title", "text", "source_url", "retrieved"}
     assert all(set(c) == keys for c in clauses)
     ids = [c["id"] for c in clauses]
     assert len(ids) == len(set(ids)), "clause ids must be unique"
     assert "fa-41b" in ids  # id cited in report.py prompt example
+    assert "claude/" not in (Path(__file__).parent.parent / "agent" / "corpus" / "clauses.json").read_text()
 
 
-# --- the payoff panel's ₹ figures must resolve against the same corpus (§8) ---
-def test_payoff_panel_citations_resolve():
-    import re
+def test_rehearsal_report_is_a_local_response_recommendation():
+    from api.main import rehearsal_report_for
+
+    report = rehearsal_report_for("Z1")
+
+    assert report is not None
+    assert "prototype response recommendation" in report["narrative"].lower()
+    assert "requires immediate evacuation" not in report["narrative"].lower()
+    assert any("assess evacuation" in action.lower() for action in report["structured"]["actions"])
+
+
+# --- payoff copy must keep unmeasured business claims out of the public UI ---
+def test_payoff_panel_keeps_business_claims_evidence_bound():
     from pathlib import Path
     root = Path(__file__).parent.parent
-    clauses = json.loads((root / "agent" / "corpus" / "clauses.json").read_text())
-    ids = {c["id"] for c in clauses}
     panel = (root / "web" / "src" / "PayoffPanel.tsx").read_text()
-    cited = set(re.findall(r'cite:\s*"([^"]+)"', panel))
-    assert cited, "ROI figures must carry clause ids"
-    assert cited <= ids, f"unresolvable citations: {cited - ids}"
+    assert "Design-partner pilot measure" in panel
+    assert "proposed, not measured" in panel
+    assert "avoided-liability range" in panel
+    assert "₹" not in panel
+    assert "cite:" not in panel
+    assert "ISA-18.2" not in panel
 
 
 # --- escalate.py: SDK tool loop, ends when fire_alert+generate_report done ---

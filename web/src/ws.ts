@@ -47,10 +47,62 @@ export interface Alert {
 
 export type LiveMsg = RiskScore | Alert;
 
-export function connectLive(onMsg: (m: LiveMsg) => void): WebSocket {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/live`);
-  ws.onmessage = (e) => onMsg(JSON.parse(e.data));
-  // ponytail: no reconnect/backoff — demo box; add a retry loop if the demo WS ever drops
-  return ws;
+export type LiveConnectionState = "connecting" | "connected" | "reconnecting";
+
+export type LiveConnection = {
+  close: () => void;
+};
+
+const RECONNECT_DELAY_MS = 750;
+const MAX_RECONNECT_DELAY_MS = 8_000;
+
+export function connectLive(
+  onMsg: (m: LiveMsg) => void,
+  onConnectionState?: (state: LiveConnectionState) => void,
+): LiveConnection {
+  let closed = false;
+  let socket: WebSocket | null = null;
+  let retryTimer: number | null = null;
+  let reconnectAttempts = 0;
+
+  const clearRetry = () => {
+    if (retryTimer != null) {
+      window.clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const connect = () => {
+    if (closed) return;
+    onConnectionState?.(reconnectAttempts ? "reconnecting" : "connecting");
+
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/live`);
+    socket = ws;
+    ws.onopen = () => {
+      reconnectAttempts = 0;
+      onConnectionState?.("connected");
+    };
+    ws.onmessage = (event) => onMsg(JSON.parse(event.data));
+    ws.onerror = () => ws.close();
+    ws.onclose = () => {
+      if (closed || retryTimer != null) return;
+      onConnectionState?.("reconnecting");
+      const delay = Math.min(RECONNECT_DELAY_MS * (2 ** reconnectAttempts), MAX_RECONNECT_DELAY_MS);
+      reconnectAttempts += 1;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        connect();
+      }, delay);
+    };
+  };
+
+  connect();
+  return {
+    close: () => {
+      closed = true;
+      clearRetry();
+      socket?.close();
+    },
+  };
 }

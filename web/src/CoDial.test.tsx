@@ -28,3 +28,23 @@ test("no CO yet: placeholder, no false alarm", () => {
   expect(dial.dataset.state).toBe("normal");
   expect(dial.textContent).toMatch(/—|awaiting/i);
 });
+
+test("names a WATCH advisory even while CO remains below the STEL", () => {
+  render(<CoDial ppm={280} zone="Z1" level="amber" state="WATCH" />);
+
+  const dial = screen.getByTestId("co-dial");
+  expect(dial.dataset.state).toBe("normal");
+  expect(dial.dataset.riskState).toBe("WATCH");
+  expect(screen.getByTestId("co-dial-advisory").textContent).toMatch(/WATCH/i);
+});
+
+test("keeps a WATCH fusion state distinct from a physical STEL crossing", () => {
+  render(<CoDial ppm={520} zone="Z1" level="amber" state="WATCH" />);
+
+  const dial = screen.getByTestId("co-dial");
+  expect(dial.dataset.state).toBe("alarm");
+  expect(dial.dataset.riskState).toBe("WATCH");
+  expect(screen.getByTestId("co-dial-advisory").textContent).toMatch(/WATCH · GAS ELEVATED/i);
+  expect(dial.textContent).toMatch(/CO THRESHOLD CROSSED · STEL 400/i);
+  expect(dial.textContent).not.toMatch(/ALARM · CO ≥ STEL 400/i);
+});

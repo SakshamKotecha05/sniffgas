@@ -10,6 +10,7 @@ test("renders evaluation evidence and an evidence-bound pilot outcome", () => {
   expect(screen.getByText(/fixed 100% recall operating point/i)).toBeTruthy();
   expect(screen.getByText(/gas-only 16-channel MOX baseline/i)).toBeTruthy();
   expect(screen.getByText(/200 replay episodes/i)).toBeTruthy();
+  expect(screen.getByText("140 / 150 → 0 / 150")).toBeTruthy();
   expect(screen.getByTestId("cm-compound-tp").textContent).toBe("50");
   expect(screen.getByTestId("cm-compound-fp").textContent).toBe("0");
   expect(screen.getByTestId("cm-compound-tn").textContent).toBe("150");

@@ -1,6 +1,7 @@
 """API gateway (Task 10): WS /live pushing RiskScore/Alert JSON verbatim,
 GET /reports/{id}, static-serves web/dist as Vercel fallback."""
 import asyncio
+import copy
 import json
 import os
 import threading
@@ -30,6 +31,16 @@ def push_risk_score(model: BaseModel) -> None:
 _last_level: dict[str, str] = {}  # zone -> last seen level, for red-crossing detection
 
 _CORPUS = Path(__file__).parent.parent / "agent" / "corpus" / "clauses.json"
+_REHEARSAL_REPORTS = Path(__file__).parent.parent / "agent" / "corpus" / "rehearsal_reports.json"
+
+
+def rehearsal_report_for(zone: str) -> dict | None:
+    """Return the cited rehearsal report for a configured demo zone, if any."""
+    try:
+        report = json.loads(_REHEARSAL_REPORTS.read_text()).get(zone)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return copy.deepcopy(report) if isinstance(report, dict) else None
 
 
 def _upgrade_report(rid, score, *, gen=None) -> None:
@@ -70,20 +81,25 @@ def push_with_alerts(score) -> None:
     # Canned report + alert fire immediately (instant, always available); the live
     # cited report then upgrades REPORTS[rid] off-thread, falling back to this canned
     # copy on any failure. So GET /reports/{id} always resolves, live or not.
-    REPORTS[rid] = {
+    fallback = {
         "structured": {"zone": score.zone, "ts": score.ts.isoformat(),
                        "compound": score.compound, "severity": "high"},
         "narrative": (
-            f"Evacuation ordered for zone {score.zone} at {score.ts:%H:%M:%S}: "
+            f"Evacuation response recommendation for zone {score.zone} at {score.ts:%H:%M:%S}: "
             f"compound risk {score.compound:.2f} crossed the red threshold. "
             "Top contributors: "
             + "; ".join(f"{c.feature}={c.value:.2f} (w {c.weight:+.2f})" for c in top)
         ),
         "subgraph": score.subgraph,
     }
+    rehearsal = rehearsal_report_for(score.zone)
+    REPORTS[rid] = {**(rehearsal or fallback), "subgraph": score.subgraph}
     push_risk_score(Alert(ts=score.ts, zone=score.zone, kind="evacuation",
                           compound=score.compound, report_id=rid))
-    threading.Thread(target=_upgrade_report, args=(rid, score), daemon=True).start()
+    # plan.md §6 Task 9/Q12: recorded demo runs use a rehearsal-cached report;
+    # unknown zones retain the best-effort live upgrade with the safe fallback.
+    if rehearsal is None:
+        threading.Thread(target=_upgrade_report, args=(rid, score), daemon=True).start()
 
 
 @app.websocket("/live")

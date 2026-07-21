@@ -311,7 +311,7 @@ what keeps false-alarm precision intact on the confounder scenarios below.
 ## Fusion ON/OFF ablation
 ![PR curves](eval_pr_curves.png)
 
-## Scoring latency (tick -> risk score; UI hop lands with Task 9)
+## Scoring latency (tick -> risk score; excludes the UI hop)
 p50 {np.percentile(lat, 50):.1f} ms / p95 {np.percentile(lat, 95):.1f} ms
 
 ## Confounder check (§5 guardrail 5, mean compound score)

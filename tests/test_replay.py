@@ -13,6 +13,19 @@ def test_ticks_arrive_in_order():
     assert ppms == sorted(ppms) and len(ppms) == 3
 
 
+def test_replay_bounds_retained_sensor_history(monkeypatch):
+    import sim.replay as replay
+
+    monkeypatch.setattr(replay, "STREAM_MAXLEN", 2, raising=False)
+    r = fakeredis.FakeRedis()
+    df = pd.DataFrame({"t_s": [0.0, 1.0, 2.0], "setpoint_gas1": [0, 0, 0],
+                       "s01": [10.0, 11.0, 12.0]})
+
+    replay.replay_sync(df, r, zone="Z1", speed=0)
+
+    assert r.xlen(STREAM_SENSOR) == 2
+
+
 def test_scenario_replays_ticks_and_events(tmp_path):
     from core.contracts import STREAM_CONTEXT, ContextEvent
     from sim.replay import run_scenario

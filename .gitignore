@@ -12,8 +12,9 @@ data/*.png
 
 .env
 .DS_Store
-eval_pr_curves.png
 report.md
 
 web/node_modules/
 web/dist/
+.gstack/
+*.tsbuildinfo

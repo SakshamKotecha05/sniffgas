@@ -25,7 +25,7 @@ def _features(df: pd.DataFrame, window: int = WINDOW_S) -> pd.DataFrame:
 
 # Raw mean channel slope during the hero climb peaks around ~SLOPE_SCALE units/s;
 # dividing then clipping puts the KG feature in the [0, 1] band the fusion layer
-# was designed for (see core/fusion.py `_seed_corpus`, agent/escalate.py feeds 0.9).
+# was designed for (see core/fusion.py `_seed_corpus` and `_gas_gate`).
 SLOPE_SCALE = 5.0
 
 

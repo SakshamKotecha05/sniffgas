@@ -10,8 +10,8 @@ combines a metal-oxide (MOX) sensor anomaly score with that context to score
 risk by zone.
 
 The dashboard distinguishes an early WATCH from a gas-confirmed ALARM. WATCH
-gives the control room time to inspect hazardous context; ALARM triggers the
-evacuation workflow when rising gas evidence also supports the decision.
+gives the control room time to inspect hazardous context; ALARM opens an
+evacuation response recommendation when rising gas evidence supports it.
 
 Only plant-context events are scripted. The gas traces and sensor responses are
 replayed without synthetic gas injection. The live proof is a Z1 replay; Z2 and

@@ -1,11 +1,11 @@
 # tests/test_feed.py — pure parts of the fusion feed (no Redis, no sklearn fit)
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from core.contracts import ContextEvent, RiskScore, SensorTick
 from core.fusion import train_demo_scorer
 from core.kg import DEMO_LAYOUT, PlantGraph
 
-from api.feed import AMBER_T, RED_T, level_for, score_tick
+from api.feed import AMBER_T, RED_T, level_for, reset_graph_if_replay_restarted, score_tick
 
 NOW = datetime.now(timezone.utc)
 
@@ -62,4 +62,21 @@ def test_watch_state_surfaces_as_amber_before_gas_confirms():
     alarm = score_tick(_tick(), anomaly=0.9, g=g, scorer=scorer)
     assert alarm.state == "ALARM"
     assert alarm.compound > watch.compound
-    assert alarm.level in ("amber", "red")  # level thresholds stay eval-blessed
+    assert alarm.level in ("amber", "red")  # display thresholds remain distinct from eval controls
+
+
+def test_replay_timestamp_regression_resets_dynamic_context():
+    """A looping demo scenario must not carry a prior cycle's permit or gas state
+    into the next cycle, whose source timestamps restart at the window head."""
+    graph = PlantGraph(DEMO_LAYOUT)
+    graph.apply_event(ContextEvent(ts=NOW, zone="Z1", kind="permit_active",
+                                   payload={"permit_type": "hot_work"}))
+    graph.apply_event(ContextEvent(ts=NOW, zone="Z1", kind="worker_pos",
+                                   payload={"worker_count": 4, "x": 12.5, "y": 8.2}))
+
+    clean = reset_graph_if_replay_restarted(graph, NOW, NOW - timedelta(seconds=280))
+
+    assert clean is not graph
+    assert clean.features("Z1", NOW, anomaly=0.0)["hot_work_active"] == 0.0
+    assert clean.features("Z1", NOW, anomaly=0.0)["worker_count_in_zone"] == 0.0
+    assert not any(node["type"] == "permit" for node in clean.subgraph("Z1")["nodes"])

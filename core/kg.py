@@ -26,9 +26,9 @@ SHIFT_CHANGEOVER_WINDOW_S = 15 * 60
 DEMO_LAYOUT: dict = {
     "nodes": [
         # zones
-        {"id": "Z1", "type": "zone", "label": "Process Unit A", "x": 220, "y": 160},
-        {"id": "Z2", "type": "zone", "label": "Process Unit B", "x": 520, "y": 160},
-        {"id": "Z3", "type": "zone", "label": "Tank Farm", "x": 820, "y": 200},
+        {"id": "Z1", "type": "zone", "label": "Coke Oven Battery", "x": 220, "y": 160},
+        {"id": "Z2", "type": "zone", "label": "Blast Furnace", "x": 520, "y": 160},
+        {"id": "Z3", "type": "zone", "label": "Casting Bay", "x": 820, "y": 200},
         # sensors (one gauge tick per zone; s-channels feed the anomaly model)
         {"id": "sen-Z1", "type": "sensor", "label": "CO sensor Z1", "x": 250, "y": 110},
         {"id": "sen-Z2", "type": "sensor", "label": "CO sensor Z2", "x": 550, "y": 110},
