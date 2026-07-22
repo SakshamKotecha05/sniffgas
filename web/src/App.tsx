@@ -97,7 +97,11 @@ export default function App() {
           </p>
         </div>
         <div className={`command-state-card command-state-${status.tone}`}>
-          <span className="state-card-label">Operational level · zone {focusedZone ?? "—"}</span>
+          <span className="state-card-label">
+            <span aria-hidden="true" className="state-card-led" />
+            Operational level
+            <span className="state-card-zone">zone {focusedZone ?? "—"}</span>
+          </span>
           <strong data-testid="command-state">{status.label}</strong>
           <p>{status.detail}</p>
         </div>

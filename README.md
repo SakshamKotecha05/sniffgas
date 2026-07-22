@@ -75,6 +75,7 @@ Each system uses its highest score threshold that still retains all 50 hazardous
 
 Read the same trade-off from the other end.
 At a threshold that raises zero false alarms, the single-sensor baseline detects 0 of 50 incidents while fusion detects 50 of 50.
+Stated as a false-negative rate, that control is 100% for the baseline and 0% for fusion.
 At a threshold that catches every incident, the baseline raises 140 of 150 false alarms while fusion raises 0 of 150.
 These are two separate operating points, not one matched-precision comparison.
 
@@ -210,7 +211,7 @@ They differ in the window and in the scripted plant context.
 
 ```sh
 pytest tests/ -x -q     # 45 tests
-cd web && npm test      # 28 tests
+cd web && npm test      # 29 tests
 ```
 
 ## Demo video

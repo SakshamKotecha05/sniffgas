@@ -17,5 +17,5 @@ services:
       - ./data:/app/data
     command: >
       sh -c "test -f data/co_1hz.parquet || python data/prepare.py co;
-             (sleep 10; while :; do python -m sim.replay --scenario sim/scenarios/compound.yaml --speed 5; done) &
+             (sleep 10; while :; do python -m sim.replay --scenario sim/scenarios/compound.yaml --speed 2; done) &
              exec python -m api.main"

@@ -246,44 +246,84 @@ a:focus-visible,
 }
 
 .command-state-card {
+  --state-accent: #8ea3bd;
+  --state-glow: rgba(148, 163, 184, 0.14);
   position: relative;
   overflow: hidden;
-  padding: 1.08rem 1.15rem;
+  padding: 1.08rem 1.15rem 1.15rem 1.35rem;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 1rem;
-  background: linear-gradient(135deg, rgba(22, 33, 51, 0.88), rgba(12, 19, 32, 0.74));
+  background:
+    radial-gradient(125% 100% at 0% 0%, var(--state-glow), transparent 62%),
+    linear-gradient(135deg, rgba(22, 33, 51, 0.88), rgba(12, 19, 32, 0.74));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 40px rgba(2, 6, 23, 0.24);
 }
 
+/* Status rail: carries the current state colour, fading out toward the base. */
 .command-state-card::before {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 0.26rem;
+  width: 0.19rem;
   content: "";
-  background: #94a3b8;
+  background: linear-gradient(180deg, var(--state-accent) 0%, var(--state-accent) 42%, rgba(148, 163, 184, 0.12) 100%);
+}
+
+.state-card-label {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+  color: var(--state-accent);
+}
+
+.state-card-led {
+  flex: none;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--state-accent);
+  box-shadow: 0 0 0 0.2rem var(--state-glow);
+}
+
+.state-card-zone {
+  margin-left: auto;
+  padding: 0.22rem 0.44rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.42rem;
+  background: rgba(8, 14, 25, 0.55);
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .command-state-card strong {
   display: block;
-  margin-top: 0.38rem;
+  margin-top: 0.62rem;
   color: #f8fafc;
-  font-size: clamp(0.92rem, 1.2vw, 1.1rem);
+  font-size: clamp(1rem, 1.35vw, 1.22rem);
   font-weight: 800;
-  letter-spacing: 0.025em;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
 }
 
 .command-state-card p {
-  margin: 0.43rem 0 0;
+  max-width: 34rem;
+  margin: 0.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.13);
   color: #a8b7cc;
   font-size: 0.79rem;
   line-height: 1.5;
 }
 
-.command-state-watch::before { background: #fbbf24; }
-.command-state-watch { border-color: rgba(251, 191, 36, 0.34); }
-.command-state-alarm::before { background: #fb7185; }
-.command-state-alarm { border-color: rgba(251, 113, 133, 0.45); }
-.command-state-normal::before { background: #4ade80; }
+.command-state-watch { --state-accent: #fbbf24; --state-glow: rgba(251, 191, 36, 0.16); border-color: rgba(251, 191, 36, 0.34); }
+.command-state-alarm { --state-accent: #fb7185; --state-glow: rgba(251, 113, 133, 0.18); border-color: rgba(251, 113, 133, 0.45); }
+.command-state-normal { --state-accent: #4ade80; --state-glow: rgba(74, 222, 128, 0.14); }
+
+.command-state-unknown .state-card-led {
+  animation: state-standby 1.9s infinite ease-in-out;
+}
 
 .glass-panel {
   position: relative;
@@ -841,6 +881,11 @@ a:focus-visible,
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.69rem;
   line-height: 1.5;
+}
+
+@keyframes state-standby {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 
 @keyframes signal-pulse {
