@@ -109,7 +109,7 @@ export default function CoDial({
           }`}
         >
           {ppm == null ? "—" : Math.round(ppm)}
-          <span className="ml-1 text-base font-normal text-slate-400">ppm</span>
+          <span className="ml-1 text-base font-normal tracking-normal text-slate-400">ppm</span>
         </div>
         <p className={`mt-1 text-xs font-semibold ${alarm ? "text-rose-200" : "text-slate-300"}`}>
           {readingLabel}

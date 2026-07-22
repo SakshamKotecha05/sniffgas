@@ -216,7 +216,7 @@ cd web && npm test      # 29 tests
 
 ## Demo video
 
-3 to 4 minute walkthrough: <!-- TODO: paste hosted URL before submitting -->
+Walkthrough of the live dashboard, the WATCH-before-ALARM sequence, and the cited response brief: [watch on Google Drive](https://drive.google.com/file/d/1n6hP1QEd35GMpqG17HYi1M1Dys-de5uc/view?usp=sharing).
 
 ## Evidence
 

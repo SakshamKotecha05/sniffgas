@@ -112,7 +112,7 @@ export default function Heatmap({
         };
         const accessibleLabel = `Inspect ${zone.short} · ${zone.label}: ${longLevelLabel[level]}`;
         const fill = level === "unknown" ? "url(#awaiting-hatch)" : `url(#zone-${level})`;
-        const statusWidth = level === "unknown" ? 118 : level === "amber" ? 106 : 74;
+        const statusWidth = level === "unknown" ? 127 : level === "amber" ? 131 : 74;
 
         return (
           <g
